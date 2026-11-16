@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1419">
+<title>Daily Income System | نظام الدخل اليومي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">رشف</div>
+    <div class="login-subtitle">نظام الدخل اليومي · Daily Income</div>
+    <div id="loginSyncNote" style="text-align:center;font-size:11px;color:var(--text-3);margin:-22px 0 18px;min-height:14px;"></div>
+
+    <!-- PIN login (default) -->
+    <div id="pinLoginView">
+      <div class="login-error" id="loginError"></div>
+      <div class="pin-display" id="pinDisplay">
+        <div class="pin-dot"></div>
+        <div class="pin-dot"></div>
+        <div class="pin-dot"></div>
+        <div class="pin-dot"></div>
+        <div class="pin-dot"></div>
+      </div>
+      <div class="pin-pad">
+        <button class="pin-key" onclick="pinPress('1')">1</button>
+        <button class="pin-key" onclick="pinPress('2')">2</button>
+        <button class="pin-key" onclick="pinPress('3')">3</button>
+        <button class="pin-key" onclick="pinPress('4')">4</button>
+        <button class="pin-key" onclick="pinPress('5')">5</button>
+        <button class="pin-key" onclick="pinPress('6')">6</button>
+        <button class="pin-key" onclick="pinPress('7')">7</button>
+        <button class="pin-key" onclick="pinPress('8')">8</button>
+        <button class="pin-key" onclick="pinPress('9')">9</button>
+        <button class="pin-key action" onclick="pinClear()">مسح</button>
+        <button class="pin-key" onclick="pinPress('0')">0</button>
+        <button class="pin-key action" onclick="pinDelete()">⌫</button>
+      </div>
+      <div class="login-mode-toggle">
+        <a onclick="showAccountantLogin()">دخول المحاسب →</a>
+      </div>
+    </div>
+
+    <!-- Accountant login -->
+    <div class="acc-login-form" id="accLoginView">
+      <div class="login-error" id="accLoginError"></div>
+      <div class="form-group">
+        <label class="form-label">البريد الإلكتروني</label>
+        <input type="text" inputmode="email" autocomplete="username" class="form-input" id="accUsername" placeholder="name@example.com" style="direction: ltr; text-align: left;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">كلمة المرور</label>
+        <input type="password" class="form-input" id="accPassword" autocomplete="current-password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-block" id="accLoginBtn" onclick="handleAccountantLogin()">دخول</button>
+      <div class="login-mode-toggle">
+        <a onclick="showPinLogin()">← دخول الموظف</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ EMPLOYEE APP ============ -->
+<div id="employeeApp" class="app">
+  <div class="navbar">
+    <div class="navbar-brand">RASHF</div>
+    <div class="navbar-user">
+      <div class="user-info">
+        <div class="name" id="empName">—</div>
+        <div class="meta" id="empMeta">—</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+    </div>
+  </div>
+  <div class="container">
+    <div class="page-header">
+      <div class="page-title">End of Shift Report</div>
+      <div class="page-subtitle">Upload receipts and enter actual amounts</div>
+      <div id="empSyncStatus" style="font-size: 11px; color: var(--text-3); margin-top: 4px;"></div>
+    </div>
+
+    <div id="empAlert"></div>
+
+    <!-- Info bar showing employee/shift/brand -->
+    <div class="info-bar">
+      <div class="info-cell">
+        <div class="label">Shift</div>
+        <div class="value" id="infoShift">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="label">Brand</div>
+        <div class="value" id="infoBrand">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="label">Branch</div>
+        <div class="value" id="infoBranch">—</div>
+      </div>
+    </div>
+
+    <!-- Date -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📅</span> Date</div>
+      <div style="position: relative;">
+        <input type="text" class="form-input" id="empDateDisplay" readonly tabindex="-1" placeholder="YYYY-MM-DD" style="direction: ltr; text-align: left; font-family: 'Inter', monospace; font-size: 16px; letter-spacing: 1px;">
+        <span style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 20px; pointer-events: none;">📅</span>
+        <input type="date" id="empDate" aria-label="Date" style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;" onclick="openDatePicker()" onchange="onDateChange()">
+      </div>
+      <div style="font-size: 11px; color: var(--text-3); margin-top: 6px;">
+        Day ends at 2:30 AM — shift closing before this counts for previous day
+      </div>
+    </div>
+
+    <!-- Images -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📸</span> Upload Photos</div>
+
+      <!-- Hidden file inputs for camera and gallery -->
+      <input type="file" id="fileFoodicsCamera" accept="image/*" capture="environment" style="display:none" onchange="handleFileUpload(event, 'foodics')">
+      <input type="file" id="fileFoodicsGallery" accept="image/*" multiple style="display:none" onchange="handleFileUpload(event, 'foodics')">
+      <input type="file" id="fileCashCamera" accept="image/*" capture="environment" style="display:none" onchange="handleFileUpload(event, 'cash')">
+      <input type="file" id="fileCashGallery" accept="image/*" multiple style="display:none" onchange="handleFileUpload(event, 'cash')">
+      <input type="file" id="fileNetworkCamera" accept="image/*" capture="environment" style="display:none" onchange="handleFileUpload(event, 'network')">
+      <input type="file" id="fileNetworkGallery" accept="image/*" multiple style="display:none" onchange="handleFileUpload(event, 'network')">
+
+      <div class="upload-section">
+        <div class="upload-box" id="boxFoodics" onclick="showUploadOptions('foodics')">
+          <div class="upload-icon">🧾</div>
+          <div class="upload-label">Foodics</div>
+          <span class="file-count" style="display:none;">0</span>
+        </div>
+        <div class="upload-box" id="boxCash" onclick="showUploadOptions('cash')">
+          <div class="upload-icon">💵</div>
+          <div class="upload-label">Cash</div>
+          <span class="file-count" style="display:none;">0</span>
+        </div>
+        <div class="upload-box" id="boxNetwork" onclick="showUploadOptions('network')">
+          <div class="upload-icon">💳</div>
+          <div class="upload-label">Network</div>
+          <span class="file-count" style="display:none;">0</span>
+        </div>
+      </div>
+      <div id="previewFoodics" class="preview-list"></div>
+      <div id="previewCash" class="preview-list"></div>
+      <div id="previewNetwork" class="preview-list"></div>
+    </div>
+
+    <!-- Payments -->
+    <div class="card">
+      <div class="card-title"><span class="icon">💰</span> Payments</div>
+      <div class="payments-grid" id="empPaymentsGrid">
+        <!-- Will be populated dynamically by renderEmpPaymentsGrid() -->
+      </div>
+      <div class="total-card">
+        <div class="label">Net Payments</div>
+        <div>
+          <span class="value" id="empTotal">0.00</span>
+          <span class="currency">SAR</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="card">
+      <div class="card-title"><span class="icon">📝</span> Notes (optional)</div>
+      <textarea class="form-textarea" id="empNotes" rows="3" placeholder="Any notes for the accountant..."></textarea>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn btn-block" style="font-size: 15px; padding: 14px; flex: 1;" onclick="submitShift()" id="empSubmitBtn">
+        ✓ Submit Shift Report
+      </button>
+      <button class="btn btn-secondary" style="font-size: 14px; padding: 14px 20px; display: none;" onclick="empCancelEdit()" id="empCancelEditBtn">
+        ✕ Cancel Edit
+      </button>
+    </div>
+
+    <div class="card" style="margin-top: 24px;">
+      <div class="card-title"><span class="icon">📋</span> My Recent Submissions</div>
+      <div id="empSubmissionsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ACCOUNTANT APP ============ -->
+<div id="accountantApp" class="app">
+  <div class="navbar">
+    <div class="navbar-brand">رشف · لوحة المحاسب</div>
+    <div class="navbar-user">
+      <div class="user-info">
+        <div class="name" id="accUserLabel">المحاسب</div>
+        <div class="meta" id="navSyncStatus"></div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">خروج</button>
+    </div>
+  </div>
+  <div class="container">
+    <div class="page-header">
+      <div class="page-title">لوحة تحكم المحاسب</div>
+      <div class="page-subtitle">إدارة ومراجعة دخل الفروع اليومي</div>
+    </div>
+
+    <div id="accAlert"></div>
+    <div id="accSecurityBanner"></div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('dashboard', this)">📊 لوحة المعلومات</button>
+      <button class="tab" onclick="switchTab('shifts', this)">📋 الشفتات</button>
+      <button class="tab" onclick="switchTab('summary', this)">📈 ملخص الفروع</button>
+      <button class="tab" onclick="switchTab('employees', this)">👥 إدارة الموظفين</button>
+      <button class="tab" onclick="switchTab('payments', this)">💳 طرق الدفع</button>
+      <button class="tab" onclick="switchTab('brands', this)">🏷️ الإعدادات والبراندات</button>
+      <button class="tab" onclick="switchTab('audit', this)">📜 سجل التعديلات</button>
+    </div>
+
+    <!-- Dashboard tab -->
+    <div id="tabDashboard" class="tab-content">
+      <div class="stats-grid" id="statsGrid"></div>
+
+
+      <div class="card">
+        <div class="card-title"><span class="icon">🔍</span> الفلاتر</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+          <button class="btn btn-sm btn-secondary" onclick="quickFilter('today')">📅 اليوم</button>
+          <button class="btn btn-sm btn-secondary" onclick="quickFilter('yesterday')">⏪ الأمس</button>
+          <button class="btn btn-sm btn-secondary" onclick="quickFilter('week')">📆 آخر 7 أيام</button>
+          <button class="btn btn-sm btn-secondary" onclick="quickFilter('month')">🗓️ هذا الشهر</button>
+          <button class="btn btn-sm btn-secondary" onclick="quickFilter('all')">∞ الكل</button>
+        </div>
+        <div class="filter-bar">
+          <div class="form-group">
+            <label class="form-label">من تاريخ</label>
+            <input type="date" class="form-input" id="filterDateFrom">
+          </div>
+          <div class="form-group">
+            <label class="form-label">إلى تاريخ</label>
+            <input type="date" class="form-input" id="filterDateTo">
+          </div>
+          <div class="form-group">
+            <label class="form-label">البراند</label>
+            <select class="form-select" id="filterBrand">
+              <option value="">كل البراندات</option>
+              <option value="rashf">رشف</option>
+              <option value="armeema">أرميما</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الفرع</label>
+            <select class="form-select" id="filterBranch">
+              <option value="">كل الفروع</option>
+            </select>
+          </div>
+          <button class="btn" onclick="applyFilters()">تطبيق</button>
+          <button class="btn btn-secondary" onclick="resetFilters()">إعادة</button>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 20px;">
+        <button class="btn btn-success" style="padding: 12px 24px;" onclick="exportToExcel()">
+          📥 تصدير ملف Excel
+        </button>
+      </div>
+      <div id="loadedRangeNote" style="text-align: center; font-size: 11px; color: var(--text-3); margin-top: 12px;"></div>
+    </div>
+
+    <!-- Shifts tab -->
+    <div id="tabShifts" class="tab-content" style="display:none;">
+      <!-- Batch OCR section -->
+      <div class="card" style="border-color: rgba(96, 165, 250, 0.3);">
+        <div class="card-title" style="color: var(--info);">
+          <span class="icon">🤖</span> قراءة جماعية للصور بالذكاء الاصطناعي
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px; line-height: 1.7;">
+          حدد التاريخ والنطاق ثم اضغط "ابدأ القراءة الجماعية" — النظام راح يقرأ كل صور الشفتات تلقائياً ويحفظ النتائج.
+          بعدها تقدر تراجع كل شفت على حدة.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+          <button class="btn btn-sm btn-secondary" onclick="setBatchDate('today')">📅 اليوم</button>
+          <button class="btn btn-sm btn-secondary" onclick="setBatchDate('yesterday')">⏪ الأمس</button>
+          <button class="btn btn-sm btn-secondary" onclick="setBatchDate('week')">📆 آخر 7 أيام</button>
+        </div>
+        <div class="filter-bar" style="margin-bottom: 14px;">
+          <div class="form-group">
+            <label class="form-label">من تاريخ</label>
+            <input type="date" class="form-input" id="batchDateFrom">
+          </div>
+          <div class="form-group">
+            <label class="form-label">إلى تاريخ</label>
+            <input type="date" class="form-input" id="batchDateTo">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الفرع</label>
+            <select class="form-select" id="batchBranch">
+              <option value="">كل الفروع</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">الحالة</label>
+            <select class="form-select" id="batchScope">
+              <option value="pending">الشفتات غير المقروءة فقط</option>
+              <option value="all">كل الشفتات (إعادة قراءة)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="startBatchOcr()" id="batchStartBtn">▶️ ابدأ القراءة الجماعية</button>
+          <button class="btn btn-secondary" onclick="previewBatchScope()">🔍 عرض الشفتات المختارة</button>
+        </div>
+        <div id="batchStatus" style="margin-top: 14px;"></div>
+      </div>
+
+      <!-- Image Export section -->
+      <div class="card" style="border-color: rgba(212, 165, 116, 0.3);">
+        <div class="card-title" style="color: var(--accent);">
+          <span class="icon">📦</span> تصدير الصور كملف مضغوط (ZIP)
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px; line-height: 1.7;">
+          حدد التاريخ والنطاق ثم اضغط "تصدير الصور" — النظام راح يجمع كل صور الشفتات في ملف ZIP منظم:<br>
+          <code style="background: var(--bg); padding: 2px 6px; border-radius: 4px; font-size: 11px;">الفرع/التاريخ_الشفت/فودكس_1.jpg, كاش_1.jpg, شبكة_1.jpg</code>
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;">
+          <button class="btn btn-sm btn-secondary" onclick="setExportDate('today')">📅 اليوم</button>
+          <button class="btn btn-sm btn-secondary" onclick="setExportDate('yesterday')">⏪ الأمس</button>
+          <button class="btn btn-sm btn-secondary" onclick="setExportDate('week')">📆 آخر 7 أيام</button>
+          <button class="btn btn-sm btn-secondary" onclick="setExportDate('month')">📊 هذا الشهر</button>
+        </div>
+        <div class="filter-bar" style="margin-bottom: 14px;">
+          <div class="form-group">
+            <label class="form-label">من تاريخ</label>
+            <input type="date" class="form-input" id="exportDateFrom">
+          </div>
+          <div class="form-group">
+            <label class="form-label">إلى تاريخ</label>
+            <input type="date" class="form-input" id="exportDateTo">
+          </div>
+          <div class="form-group">
+            <label class="form-label">الفرع</label>
+            <select class="form-select" id="exportBranch">
+              <option value="">كل الفروع</option>
+            </select>
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="exportImagesZip()" id="exportZipBtn">📦 تصدير الصور كـ ZIP</button>
+          <button class="btn btn-secondary" onclick="previewExportScope()">🔍 عرض الشفتات والصور</button>
+        </div>
+        <div id="exportStatus" style="margin-top: 14px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title"><span class="icon">📋</span> كل الشفتات المرسلة</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>التاريخ</th>
+                <th>البراند</th>
+                <th>الفرع</th>
+                <th>الشفت</th>
+                <th>الموظف</th>
+                <th>الإجمالي</th>
+                <th>الصور</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="shiftsTableBody"></tbody>
+          </table>
+        </div>
+        <div id="shiftsMore" style="text-align: center; margin-top: 12px;"></div>
+      </div>
+    </div>
+
+    <!-- Summary tab -->
+    <div id="tabSummary" class="tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-title"><span class="icon">📈</span> ملخص الدخل لكل فرع</div>
+        <div id="branchSummary"></div>
+      </div>
+    </div>
+
+    <!-- Employees management tab -->
+    <div id="tabEmployees" class="tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">👥</span> إدارة الموظفين
+          <button class="btn btn-sm" style="margin-inline-start: auto;" onclick="openEmployeeModal()">+ إضافة موظف</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>رقم PIN</th>
+                <th>البراند</th>
+                <th>الفرع</th>
+                <th>الشفت</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="employeesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">🏢</span> إدارة الفروع
+          <button class="btn btn-sm" style="margin-inline-start: auto;" onclick="openBranchModal()">+ إضافة فرع</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>اسم الفرع</th>
+                <th>البراند</th>
+                <th>عدد الموظفين</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="branchesTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Payment Methods Management Tab -->
+    <div id="tabPayments" class="tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">💳</span> إدارة طرق الدفع
+          <button class="btn btn-sm" style="margin-inline-start: auto;" onclick="openPaymentMethodModal()">+ إضافة طريقة دفع</button>
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px;">
+          أضف، عدّل، أو احذف طرق الدفع. الطرق المفعّلة فقط تظهر للموظف في واجهة إدخال الشفتات.
+        </p>
+        <div class="alert alert-info" style="font-size: 12px; margin-bottom: 16px;">
+          ℹ️ <strong>تنبيه:</strong> حذف طريقة دفع لن يحذف البيانات القديمة، لكن لن يستطيع الموظف إدخال مبالغ جديدة لها.
+          استخدم خيار "تعطيل" بدلاً من الحذف للحفاظ على البيانات التاريخية.
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>الترتيب</th>
+                <th>الاسم بالإنجليزي</th>
+                <th>الاسم بالعربي</th>
+                <th>المعرّف</th>
+                <th>النوع</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="paymentMethodsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Brands management tab -->
+    <div id="tabBrands" class="tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">🏷️</span> إدارة البراندات
+          <button class="btn btn-sm" style="margin-inline-start: auto;" onclick="openBrandModal()">+ إضافة براند</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>الاسم</th>
+                <th>المعرّف</th>
+                <th>عدد الفروع</th>
+                <th>عدد الموظفين</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="brandsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- OCR Settings -->
+      <div class="card" style="border-color: rgba(96, 165, 250, 0.3);">
+        <div class="card-title" style="color: var(--info);">
+          <span class="icon">🤖</span> إعدادات قراءة الصور بالذكاء الاصطناعي
+        </div>
+        <div class="alert alert-info" style="margin-bottom: 14px;">
+          ℹ️ يستخدم النظام <strong>Google Gemini</strong> لقراءة الصور. إذا كان الموديل المختار مشغولاً أو غير متاح يتحول النظام تلقائياً للموديل التالي في القائمة.
+        </div>
+        <div class="alert alert-danger" style="margin-bottom: 14px; font-size: 12px;">
+          ⚠️ المفتاح يُحفظ في متصفح هذا الجهاز فقط ولا يُرفع للسحابة ولا يدخل في النسخ الاحتياطية. قيّده من Google Cloud Console على نطاق موقعك (HTTP referrer) حتى لا يُستخدم من مكان آخر.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Google Gemini API Key</label>
+          <input type="password" class="form-input" id="apiKeyInput" placeholder="AIza..." style="direction: ltr; text-align: left; font-family: monospace;">
+          <div style="font-size: 12px; color: var(--text-3); margin-top: 8px; line-height: 1.8;">
+            <strong>كيف تحصل على المفتاح (مجاناً):</strong><br>
+            1. ادخل على <a href="https://aistudio.google.com/apikey" target="_blank" style="color: var(--accent);">aistudio.google.com/apikey</a><br>
+            2. سجل دخول بحساب Google<br>
+            3. اضغط "Create API Key"<br>
+            4. انسخ المفتاح والصقه هنا
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">الموديل الافتراضي (لورقة فودكس وورقة الشبكة)</label>
+          <select class="form-select" id="modelSelect">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (الأقوى - موصى به)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (أسرع وأرخص)</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+            <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+          </select>
+          <div style="font-size: 11px; color: var(--text-3); margin-top: 6px;">
+            للإيصالات العادية، Lite يكفي. لو فيه مشاكل، اختر Flash.
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">موديل قراءة الكاش (مهمة معقدة)</label>
+          <select class="form-select" id="modelCashSelect">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (الأفضل لعد الفلوس)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
+            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          </select>
+          <div style="font-size: 11px; color: var(--text-3); margin-top: 6px;">
+            قراءة الفلوس تحتاج موديل قوي. لا تستخدم Lite هنا.
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="saveApiKey()">💾 حفظ المفتاح</button>
+          <button class="btn btn-secondary" onclick="testApiKey()">🧪 اختبار المفتاح</button>
+          <button class="btn btn-danger" onclick="clearApiKey()">🗑️ حذف</button>
+        </div>
+        <div id="apiKeyStatus" style="margin-top: 12px;"></div>
+      </div>
+
+      <!-- Firebase Cloud Sync -->
+      <div class="card" style="border-color: rgba(255, 152, 0, 0.4);">
+        <div class="card-title" style="color: #ff9800;">
+          <span class="icon">☁️</span> المزامنة السحابية (Firebase) - الموصى به
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px; line-height: 1.7;">
+          <strong>المزامنة اللحظية بين كل الأجهزة!</strong> لما تضيف موظف على الكمبيوتر، يظهر فوراً على الجوال.
+          البيانات محفوظة في Firebase السحابي وآمنة.
+        </p>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding: 12px; background: var(--bg); border-radius: 8px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600;">
+            <input type="checkbox" id="firebaseToggle" onchange="setFirebaseSync(this.checked)" style="width: 18px; height: 18px;">
+            <span>تفعيل المزامنة السحابية</span>
+          </label>
+          <div style="margin-inline-start: auto; font-size: 12px; color: var(--text-2);" id="firebaseSyncStatus">⚪ غير متصل</div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <button class="btn btn-sm" onclick="retrySyncNow()">🔄 إعادة محاولة المزامنة</button>
+          <button class="btn btn-sm btn-secondary" id="migrateImagesBtn" onclick="migrateImages()">🗜️ ترحيل صور الشفتات القديمة</button>
+          <span id="legacyImagesNote" style="font-size: 12px; color: var(--text-2);"></span>
+        </div>
+        <div class="alert alert-info" style="margin-top: 14px; font-size: 12px; line-height: 1.9;">
+          ℹ️ المزامنة مفعّلة تلقائياً على كل جهاز جديد. كل شفت يُحفظ مستقلاً، وكل صورة في مستند خاص بها، فلا يمسح جهازٌ تعديلات جهاز آخر.
+          إذا انقطع الإنترنت تُحفظ البيانات على الجهاز وتُرفع تلقائياً عند عودته — راقب عبارة "بانتظار الرفع" أعلاه.
+        </div>
+      </div>
+
+      <!-- Manual Data Sync section -->
+      <div class="card" style="border-color: rgba(96, 165, 250, 0.3);">
+        <div class="card-title" style="color: var(--info);">
+          <span class="icon">🔄</span> النسخ الاحتياطي اليدوي (JSON)
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px; line-height: 1.7;">
+          للاحتياط: صدّر كل البيانات لملف JSON تقدر تحفظه أو ترسله لجهاز ثاني.
+        </p>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          <button class="btn" onclick="exportAllData()">📤 تصدير كل البيانات (JSON)</button>
+          <button class="btn btn-secondary" onclick="document.getElementById('importDataInput').click()">📥 استيراد البيانات</button>
+          <input type="file" id="importDataInput" accept=".json,application/json" style="display:none" onchange="importAllData(event)">
+        </div>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="card" style="border-color: rgba(248, 113, 113, 0.3);">
+        <div class="card-title" style="color: var(--danger);">
+          <span class="icon">⚠️</span> منطقة خطرة
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px; line-height: 1.7;">
+          <strong>مسح بيانات هذا الجهاز:</strong> يمسح النسخة المحلية فقط ثم يعيد تحميل كل شيء من السحابة (مفيد إذا ظهرت بيانات قديمة على جهاز).<br>
+          <strong>حذف الشفتات:</strong> يحذف نهائياً الشفتات المطابقة للفلتر الحالي في لوحة المعلومات، من كل الأجهزة. <strong>لا يمكن التراجع.</strong>
+        </p>
+        <button class="btn btn-danger" onclick="resetAllData()">🧹 مسح بيانات هذا الجهاز وإعادة التحميل</button>
+        <button class="btn btn-secondary" style="margin-inline-start: 8px;" onclick="resetShiftsOnly()">🗑️ حذف الشفتات المطابقة للفلتر</button>
+      </div>
+    </div>
+    <!-- Audit log tab -->
+    <div id="tabAudit" class="tab-content" style="display:none;">
+      <div class="card">
+        <div class="card-title">
+          <span class="icon">📜</span> سجل التعديلات
+          <button class="btn btn-sm btn-secondary" style="margin-inline-start: auto;" onclick="renderAudit()">🔄 تحديث</button>
+        </div>
+        <p style="color: var(--text-2); font-size: 13px; margin-bottom: 14px;">كل إضافة أو تعديل أو حذف يُسجَّل هنا: من قام به، متى، وما الذي تغيّر (آخر 300 عملية).</p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>التفاصيل</th></tr></thead>
+            <tbody id="auditTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay" id="shiftModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">تفاصيل الشفت</div>
+      <button class="modal-close" onclick="closeShiftModal()">×</button>
+    </div>
+    <div class="modal-body" id="shiftModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" onclick="deleteShift()">حذف</button>
+      <button class="btn" onclick="saveShiftEdits()">💾 حفظ التعديلات</button>
+      <button class="btn btn-secondary" onclick="closeShiftModal()">إغلاق</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="employeeModal">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-header">
+      <div class="modal-title" id="employeeModalTitle">إضافة موظف جديد</div>
+      <button class="modal-close" onclick="closeEmployeeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">اسم الموظف (عربي)</label>
+        <input type="text" class="form-input" id="empFormNameAr" placeholder="مثل: أحمد محمد">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Employee Name (English)</label>
+        <input type="text" class="form-input" id="empFormNameEn" placeholder="e.g. Ahmed Mohammed" style="direction: ltr; text-align: left;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">رقم PIN (5 أرقام)</label>
+        <input type="text" inputmode="numeric" maxlength="5" class="form-input" id="empFormPin" placeholder="12345">
+      </div>
+      <div class="form-group">
+        <label class="form-label">البراند</label>
+        <select class="form-select" id="empFormBrand" onchange="updateBranchDropdown()">
+          <option value="rashf">رشف</option>
+          <option value="armeema">أرميما</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الفرع</label>
+        <select class="form-select" id="empFormBranch"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الشفت</label>
+        <select class="form-select" id="empFormShift">
+          <option value="morning">صباحي</option>
+          <option value="evening">مسائي</option>
+          <option value="saudi">سعودي</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeEmployeeModal()">إلغاء</button>
+      <button class="btn" onclick="saveEmployee()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="branchModal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-header">
+      <div class="modal-title" id="branchModalTitle">إضافة فرع جديد</div>
+      <button class="modal-close" onclick="closeBranchModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">اسم الفرع (عربي)</label>
+        <input type="text" class="form-input" id="branchFormNameAr" placeholder="مثل: فرع بريدة الرئيسي">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Branch Name (English)</label>
+        <input type="text" class="form-input" id="branchFormNameEn" placeholder="e.g. Buraydah Main" style="direction: ltr; text-align: left;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">البراند</label>
+        <select class="form-select" id="branchFormBrand">
+          <option value="rashf">رشف</option>
+          <option value="armeema">أرميما</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeBranchModal()">إلغاء</button>
+      <button class="btn" onclick="saveBranch()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload source picker modal -->
+<!-- Image Lightbox -->
+<div class="lightbox-overlay" id="imageLightbox" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox()" title="إغلاق">✕</button>
+  <button class="lightbox-nav lightbox-prev" onclick="lightboxNav(-1, event)" title="السابقة">‹</button>
+  <button class="lightbox-nav lightbox-next" onclick="lightboxNav(1, event)" title="التالية">›</button>
+  <div class="lightbox-counter" id="lightboxCounter">1 / 1</div>
+  <div class="lightbox-content" onclick="event.stopPropagation()">
+    <img id="lightboxImg" src="" alt="">
+  </div>
+  <div class="lightbox-actions">
+    <button class="lightbox-action-btn" onclick="lightboxZoom(1.25)" title="تكبير">🔍+</button>
+    <button class="lightbox-action-btn" onclick="lightboxZoom(0.8)" title="تصغير">🔍-</button>
+    <button class="lightbox-action-btn" onclick="lightboxReset()" title="إعادة">↺</button>
+    <button class="lightbox-action-btn" onclick="lightboxDownload()" title="تحميل">⬇️</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="uploadSourceModal">
+  <div class="modal" style="max-width: 380px;">
+    <div class="modal-header">
+      <div class="modal-title" id="uploadSourceTitle">Choose photo source</div>
+      <button class="modal-close" onclick="closeUploadSourceModal()">×</button>
+    </div>
+    <div class="modal-body" style="padding: 20px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <button class="btn" style="flex-direction: column; padding: 24px 12px; height: auto;" onclick="triggerUpload('camera')">
+          <div style="font-size: 36px;">📷</div>
+          <div style="margin-top: 8px; font-size: 14px;">Camera</div>
+          <div style="font-size: 11px; opacity: 0.7;">Take photo now</div>
+        </button>
+        <button class="btn btn-secondary" style="flex-direction: column; padding: 24px 12px; height: auto;" onclick="triggerUpload('gallery')">
+          <div style="font-size: 36px;">🖼️</div>
+          <div style="margin-top: 8px; font-size: 14px;">Gallery</div>
+          <div style="font-size: 11px; opacity: 0.7;">Choose from photos</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="ocrEditModal">
+  <div class="modal" style="max-width: 600px;">
+    <div class="modal-header">
+      <div class="modal-title">تعديل قراءات الصور يدوياً</div>
+      <button class="modal-close" onclick="closeOcrEditModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="font-size: 12px;">
+        ℹ️ إذا قرأت الصور بشكل غير دقيق، تقدر تكتب الأرقام الصحيحة هنا.
+      </div>
+
+      <h4 style="font-size: 13px; color: var(--text-2); margin-bottom: 10px;">🧾 قراءات ورقة فودكس (البرنامج):</h4>
+      <div class="payments-grid" style="margin-bottom: 16px;" id="ocrFoodicsGrid">
+        <!-- Populated dynamically -->
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div class="pay-input">
+          <label>💵 إجمالي صور الكاش</label>
+          <input type="number" step="0.01" id="ocr_cash_image">
+        </div>
+        <div class="pay-input">
+          <label>💳 إجمالي ورقة الشبكة (mada)</label>
+          <input type="number" step="0.01" id="ocr_network_image">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeOcrEditModal()">إلغاء</button>
+      <button class="btn" onclick="saveOcrEdits()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="brandModal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-header">
+      <div class="modal-title" id="brandModalTitle">إضافة براند جديد</div>
+      <button class="modal-close" onclick="closeBrandModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">اسم البراند (عربي)</label>
+        <input type="text" class="form-input" id="brandFormNameAr" placeholder="مثل: رشف">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Brand Name (English)</label>
+        <input type="text" class="form-input" id="brandFormNameEn" placeholder="e.g. Rashf" style="direction: ltr; text-align: left;">
+      </div>
+      <div class="form-group" id="brandIdFormGroup">
+        <label class="form-label">المعرّف (حروف إنجليزية فقط، بدون مسافات)</label>
+        <input type="text" class="form-input" id="brandFormId" placeholder="rashf" style="direction: ltr; text-align: left;">
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 4px;">يُستخدم داخلياً في النظام. لا يمكن تعديله بعد الإنشاء.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeBrandModal()">إلغاء</button>
+      <button class="btn" onclick="saveBrand()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Payment Method Modal -->
+<div class="modal-overlay" id="paymentMethodModal">
+  <div class="modal" style="max-width: 500px;">
+    <div class="modal-header">
+      <div class="modal-title" id="paymentMethodModalTitle">إضافة طريقة دفع جديدة</div>
+      <button class="modal-close" onclick="closePaymentMethodModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">الاسم بالإنجليزي *</label>
+        <input type="text" class="form-input" id="pmFormNameEn" placeholder="e.g. mada, Cash, Jahez" style="direction: ltr; text-align: left;">
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 4px;">هذا الاسم يظهر للموظف في واجهة إدخال الشفت</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الاسم بالعربي</label>
+        <input type="text" class="form-input" id="pmFormNameAr" placeholder="مثل: مدى، كاش، جاهز">
+      </div>
+      <div class="form-group" id="pmIdFormGroup">
+        <label class="form-label">المعرّف (حروف إنجليزية صغيرة فقط، بدون مسافات) *</label>
+        <input type="text" class="form-input" id="pmFormId" placeholder="mada" style="direction: ltr; text-align: left;">
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 4px;">يُستخدم داخلياً في النظام. لا يمكن تعديله بعد الإنشاء.</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">الترتيب (الأقل يظهر أولاً)</label>
+        <input type="number" class="form-input" id="pmFormOrder" placeholder="1" min="1" style="direction: ltr; text-align: left;">
+      </div>
+      <div class="form-group">
+        <label class="form-label">النوع</label>
+        <select class="form-select" id="pmFormType">
+          <option value="other">أخرى (تطبيق توصيل أو خدمة)</option>
+          <option value="cash">كاش (نقدي)</option>
+          <option value="card">شبكة (بطاقة)</option>
+        </select>
+        <div style="font-size: 11px; color: var(--text-3); margin-top: 4px;">
+          النوع يستخدم في المقارنات: الكاش والشبكة لهما حسابات خاصة في تقارير Excel
+        </div>
+      </div>
+      <div class="form-group">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <input type="checkbox" id="pmFormActive" checked>
+          <span>مفعّل (يظهر للموظف)</span>
+        </label>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closePaymentMethodModal()">إلغاء</button>
+      <button class="btn" onclick="savePaymentMethod()">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic choice dialog (replaces prompt()) -->
+<div class="modal-overlay" id="choiceModal">
+  <div class="modal" style="max-width: 400px;">
+    <div class="modal-header">
+      <div class="modal-title" id="choiceTitle"></div>
+      <button class="modal-close" id="choiceClose">×</button>
+    </div>
+    <div class="modal-body" style="padding: 20px;">
+      <p id="choiceText" style="color: var(--text-2); font-size: 14px; line-height: 1.7; margin-bottom: 16px;"></p>
+      <div id="choiceButtons" style="display: grid; gap: 10px;"></div>
+    </div>
+  </div>
+</div>
+
+<noscript><div style="padding: 40px; text-align: center; color: #fff;">JavaScript is required · يتطلب النظام تفعيل JavaScript</div></noscript>
+</body>
+</html>
