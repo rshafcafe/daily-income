@@ -5,11 +5,55 @@ import { num, round2, sleep } from './util.js';
 import { dataUrlParts } from './images.js';
 
 export const getApiKey = () => localStorage.getItem('rashf_gemini_key') || '';
-export const getModel = () => localStorage.getItem('rashf_gemini_model') || GEMINI_MODELS[0];
-export const getCashModel = () => localStorage.getItem('rashf_gemini_cash_model') || GEMINI_MODELS[0];
+// '' = automatic: newest available model. A saved model is only a preference;
+// if Google retires it the chain moves on by itself.
+export const getModel = () => localStorage.getItem('rashf_gemini_model') || '';
+export const getCashModel = () => localStorage.getItem('rashf_gemini_cash_model') || '';
 
 const API = 'https://generativelanguage.googleapis.com/v1beta/models';
 const BACKOFF = [3000, 8000, 20000];
+const deadModels = new Set();           // retired / unsupported for this key (this session)
+let modelCache = null;                  // { key, list }
+
+/** Rank: newest version first, Flash before Flash Lite, stable before preview. */
+export function rankModels(names) {
+  const info = (n) => {
+    const m = n.match(/^gemini-(\d+(?:\.\d+)?)-(flash|pro)(-lite)?(.*)$/);
+    if (!m) return null;
+    const rest = m[4];
+    if (/tts|image|audio|live|embed|thinking|exp|computer|robot|native/.test(rest)) return null;
+    if (m[2] === 'pro') return null;                      // slow and small free quota
+    return { n, v: parseFloat(m[1]), lite: !!m[3], preview: rest !== '' && rest !== '-latest' };
+  };
+  const out = names.map(info).filter(Boolean);
+  out.sort((a, b) => (a.preview - b.preview) || (b.v - a.v) || (a.lite - b.lite) || a.n.localeCompare(b.n));
+  return out.map((x) => x.n);
+}
+
+/** Models this key can actually use, from Google's own list (cached per session). */
+export async function listModels(key = getApiKey()) {
+  if (!key) return [...GEMINI_MODELS];
+  if (modelCache?.key === key) return modelCache.list;
+  try {
+    const res = await fetch(`${API}?pageSize=1000`, { headers: { 'x-goog-api-key': key } });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error?.message || res.status);
+    const names = (json.models || [])
+      .filter((m) => (m.supportedGenerationMethods || []).includes('generateContent'))
+      .map((m) => String(m.name || '').replace(/^models\//, ''));
+    const list = rankModels(names);
+    if (!list.length) throw new Error('no usable models');
+    modelCache = { key, list };
+    return list;
+  } catch {
+    return [...GEMINI_MODELS];          // offline / listing blocked: try the aliases
+  }
+}
+
+// Only a retired/unknown model counts; other 400s (bad image, bad argument) must not
+// mark a working model dead for the rest of the session.
+const modelGone = (e) => e.status === 404
+  || /no longer available|is not found|not supported for generateContent|deprecated|has been retired/i.test(e.message || '');
 
 function parseJson(text) {
   try { return JSON.parse(text); } catch { /* try to salvage */ }
@@ -48,15 +92,19 @@ export async function geminiOcr(imageDataUrl, prompt, opts = {}) {
   if (!key) throw new Error('لم يتم إعداد Gemini API Key. اذهب لتبويب "إدارة البراندات" وأضف المفتاح.');
   const img = dataUrlParts(imageDataUrl);
   if (!img) throw new Error('صورة غير صالحة');
+  const available = await listModels(key);
   const first = opts.model || getModel();
-  const chain = [first, ...GEMINI_MODELS.filter((m) => m !== first)];
+  const chain = [...new Set([...(first && available.includes(first) ? [first] : []), ...available])]
+    .filter((m) => !deadModels.has(m));
+  if (!chain.length) throw new Error('لا يوجد موديل Gemini متاح لهذا المفتاح حالياً');
   let lastErr = null;
 
   for (const model of chain) {
     const isLite = model.includes('lite');
-    const generationConfig = { temperature: 0, maxOutputTokens: isLite ? 8192 : 4096, responseMimeType: 'application/json' };
-    if (model.includes('2.5') && !isLite) generationConfig.thinkingConfig = { thinkingBudget: opts.thinkingBudget || 0 };
-    if (generationConfig.thinkingConfig?.thinkingBudget) generationConfig.maxOutputTokens += generationConfig.thinkingConfig.thinkingBudget;
+    // Newer models think by default, so leave generous room for the answer.
+    const generationConfig = { temperature: 0, maxOutputTokens: 16384, responseMimeType: 'application/json' };
+    if (/^gemini-2\.5-flash$/.test(model)) generationConfig.thinkingConfig = { thinkingBudget: opts.thinkingBudget || 0 };
+    else if (/^gemini-2\./.test(model)) generationConfig.maxOutputTokens = isLite ? 8192 : 4096;
     const body = JSON.stringify({
       contents: [{ parts: [{ inline_data: { mime_type: img.mime, data: img.base64 } }, { text: prompt }] }],
       generationConfig
@@ -68,7 +116,7 @@ export async function geminiOcr(imageDataUrl, prompt, opts = {}) {
       } catch (e) {
         lastErr = e;
         const transient = e.status === 429 || e.status === 500 || e.status === 503 || e instanceof TypeError;
-        if (e.status === 404) break;                       // model not available -> next in chain
+        if (!transient && modelGone(e)) { deadModels.add(model); break; }   // retired model -> next in chain
         if (!transient) throw e;                           // bad key, blocked content... no point retrying
         if (attempt === BACKOFF.length) break;             // exhausted -> next model
         const wait = BACKOFF[attempt] + Math.random() * 1000;
@@ -227,13 +275,22 @@ export async function ocrShiftImages(shift, allMethods, loadImage, onProgress, i
   return result;
 }
 
+/** Returns { model, reply }. Empty model = automatic (first that works). */
 export async function testKey(key, model) {
-  const res = await fetch(`${API}/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({ contents: [{ parts: [{ text: 'قل: ناجح' }] }] })
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json.error?.message || 'مفتاح غير صحيح');
-  return json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  modelCache = null;
+  const available = await listModels(key);
+  const chain = model ? [model, ...available.filter((m) => m !== model)] : available;
+  let lastErr = null;
+  for (const m of chain) {
+    const res = await fetch(`${API}/${m}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'قل: ناجح' }] }] })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) return { model: m, reply: (json.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('').trim() };
+    lastErr = Object.assign(new Error(json.error?.message || 'مفتاح غير صحيح'), { status: res.status });
+    if (!modelGone(lastErr)) throw lastErr;
+  }
+  throw lastErr || new Error('لا يوجد موديل متاح');
 }

@@ -857,19 +857,32 @@ async function deletePaymentMethod(id) {
 }
 
 /* ================= Gemini key ================= */
-function updateApiKeyUI() {
-  if (ocr.getApiKey()) $('apiKeyInput').value = ocr.getApiKey();
-  $('modelSelect').value = ocr.getModel();
-  $('modelCashSelect').value = ocr.getCashModel();
+function fillModelSelect(id, models, saved) {
+  const sel = $(id);
+  const opts = ['<option value="">تلقائي: أحدث موديل متاح (موصى به)</option>']
+    .concat(models.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`));
+  // A saved model Google no longer lists is dropped: the select falls back to automatic.
+  sel.innerHTML = opts.join('');
+  sel.value = models.includes(saved) ? saved : '';
 }
+async function updateApiKeyUI() {
+  const key = ocr.getApiKey();
+  if (key) $('apiKeyInput').value = key;
+  const models = key ? await ocr.listModels(key) : [];
+  fillModelSelect('modelSelect', models, ocr.getModel());
+  fillModelSelect('modelCashSelect', models, ocr.getCashModel());
+}
+const saveModelPref = (k, v) => (v ? localStorage.setItem(k, v) : localStorage.removeItem(k));
 const keyStatus = (html, type) => { $('apiKeyStatus').innerHTML = `<div class="alert alert-${type}">${html}</div>`; };
 function saveApiKey() {
   const key = val('apiKeyInput').trim();
   if (!key) return alert('أدخل المفتاح أولاً');
   localStorage.setItem('rashf_gemini_key', key);
-  localStorage.setItem('rashf_gemini_model', val('modelSelect'));
-  localStorage.setItem('rashf_gemini_cash_model', val('modelCashSelect'));
-  keyStatus(`✓ تم حفظ المفتاح<br>• الموديل العام: ${esc(val('modelSelect'))}<br>• موديل الكاش: ${esc(val('modelCashSelect'))}`, 'success');
+  saveModelPref('rashf_gemini_model', val('modelSelect'));
+  saveModelPref('rashf_gemini_cash_model', val('modelCashSelect'));
+  const label = (v) => esc(v || 'تلقائي');
+  keyStatus(`✓ تم حفظ المفتاح<br>• الموديل العام: ${label(val('modelSelect'))}<br>• موديل الكاش: ${label(val('modelCashSelect'))}`, 'success');
+  updateApiKeyUI();
 }
 function clearApiKey() {
   if (!confirm('حذف المفتاح؟')) return;
@@ -881,9 +894,14 @@ async function testApiKey() {
   const key = val('apiKeyInput').trim() || ocr.getApiKey();
   if (!key) return alert('أدخل المفتاح أولاً');
   const model = val('modelSelect');
-  keyStatus('⏳ جاري الاختبار باستخدام ' + esc(model) + '...', 'info');
+  keyStatus('⏳ جاري الاختبار' + (model ? ' باستخدام ' + esc(model) : '') + '...', 'info');
   try {
-    keyStatus(`✓ المفتاح يعمل مع ${esc(model)}! الرد: ${esc(await ocr.testKey(key, model))}`, 'success');
+    const r = await ocr.testKey(key, model);
+    const switched = model && r.model !== model ? `<br>⚠️ ${esc(model)} غير متاح، واستُخدم بدلاً منه ${esc(r.model)}` : '';
+    keyStatus(`✓ المفتاح يعمل مع ${esc(r.model)}! الرد: ${esc(r.reply)}${switched}`, 'success');
+    const models = await ocr.listModels(key);
+    fillModelSelect('modelSelect', models, model);
+    fillModelSelect('modelCashSelect', models, val('modelCashSelect'));
   } catch (e) {
     let tip = '';
     if (/quota|limit/i.test(e.message)) tip = '<br><br>💡 تجاوزت الحد المسموح. جرّب موديلاً آخر من القائمة.';

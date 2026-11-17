@@ -99,4 +99,6 @@ export const SEED_EMPLOYEES = EMP_SEED.map(([nameAr, nameEn, b, shift], i) => ({
   branchId: SEED_BRANCHES[b].id, shift
 }));
 
-export const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+// Fallback only, used when Google's model list can't be fetched. The real list
+// comes from the API at runtime (ocr.listModels), so retired models drop out by themselves.
+export const GEMINI_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
